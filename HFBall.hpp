@@ -20,8 +20,10 @@ public:
     
     cocos2d::DrawNode *ballObeject;
     cocos2d::Vec2 speed;
+    cocos2d::Vec2 nextPosition;
     unsigned int radius;
     unsigned int weight;
+    
 };
 
 #endif /* ball_hpp */

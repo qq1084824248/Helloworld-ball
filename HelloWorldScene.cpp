@@ -68,19 +68,22 @@ bool HelloWorld::init()
     
     
     
-    //监听鼠标点击
+    //监听鼠标点击，生成小球
     auto listener1 = EventListenerTouchOneByOne::create();
     listener1->onTouchBegan = [&](Touch* touch, Event* event)
     {
         //设定小球的属性，随机生成半径和速度
         const Vec2 touchPosition = touch->getLocation();
-        const unsigned int radius = random(20, 50);
+        const unsigned int radius = random(35, 50);
         const unsigned int weight = square(radius);
+        const float color1 = random(0.0f, 1.0f);
+        const float color2 = random(0.0f, 1.0f);
+        const float color3 = random(0.0f, 1.0f);
         const float speedX = random(-10, 10),speedY = random(-10, 10);
         
         //构建小球对象，加入scene的子节点中
         DrawNode* tempball = DrawNode::create();
-        tempball->drawDot(Vec2(0,0), radius, Color4F(1.0f, 1.0f, 1.0f, 1.0f));
+        tempball->drawDot(Vec2(0,0), radius, Color4F(color1, color2, color3, 1.0f));
         tempball->setPosition(touchPosition);
         this->addChild(tempball);
         
@@ -100,11 +103,11 @@ bool HelloWorld::init()
         {
             //可以增加计算碰撞位置的代码
             
-            //设定位置
+            //设定本帧结束时的位置
             for (auto& ball : balllist)
             {
-                ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + ball.speed.x,
-                                              ball.ballObeject->getPositionY() + ball.speed.y);
+                ball.nextPosition = Vec2(ball.ballObeject->getPositionX() + ball.speed.x,
+                                         ball.ballObeject->getPositionY() + ball.speed.y);
             }
             
             //判断边界条件，碰撞时速度取反
@@ -119,6 +122,13 @@ bool HelloWorld::init()
                 for (std::vector<HFBall>::iterator iter2 = iter1 + 1; iter2 != balllist.end(); ++iter2){
                     detectCollision(*iter1, *iter2);
                 }
+            }
+            
+            
+            //更新位置
+            for (auto& ball : balllist)
+            {
+                ball.ballObeject->setPosition(ball.nextPosition);
             }
 
         }
@@ -135,99 +145,148 @@ inline float square(float x)
     return x*x;
 }
 
+static bool calculateCollisionTime(HFBall &balla, HFBall &ballb, float &t) {
+    
+    float dx = balla.ballObeject->getPositionX() - ballb.ballObeject->getPositionX();
+    float dy = balla.ballObeject->getPositionY() - ballb.ballObeject->getPositionY();
+    //相对速度
+    float dvx = balla.speed.x - ballb.speed.x;
+    float dvy = balla.speed.y - ballb.speed.y;
+    
+    //二次方程的参数
+    //        float a = dvx * dvx + dvy * dvy;
+    //        float b = -2 * (dx * dvx + dy * dvy);
+    //        float c = dx * dx - dy * dy - square(balla.radius + ballb.radius);
+    
+    t = 0;
+    //公式解得根号部分
+    float b = square(balla.radius + ballb.radius) * (square(dvx) + square(dvy))
+    - square(dx * dvy - dy * dvx);
+    if (b < 0)
+    {
+        return false;
+    }
+    //公式解的上半部分
+    float p = -dx*dvx - dy*dvy + sqrt(b);
+    float p2 = -dx*dvx - dy*dvy - sqrt(b);
+    
+    if (square(dvx) + square(dvy) == 0)
+    {
+        t = 1;
+    }
+    else
+    {
+        float temp = fmin(abs(p), abs(p2));
+        t = temp/(square(dvx) + square(dvy));
+    }
+    
+    return true;
+}
+
 //检测小球碰撞
-bool detectCollision(HFBall& a,HFBall& b)
+bool detectCollision(HFBall& balla,HFBall& ballb)
 {
-    float ballax = a.ballObeject->getPositionX();
-    float ballay = a.ballObeject->getPositionY();
-    float ballbx = b.ballObeject->getPositionX();
-    float ballby = b.ballObeject->getPositionY();
+    //不发生碰撞时下一帧的位置
+    float ballax = balla.ballObeject->getPositionX() + balla.speed.x;
+    float ballay = balla.ballObeject->getPositionY() + balla.speed.y;
+    float ballbx = ballb.ballObeject->getPositionX() + ballb.speed.x;
+    float ballby = ballb.ballObeject->getPositionY() + ballb.speed.y;
+    
     //没有碰撞，返回false
     if (square(ballax - ballbx) + square(ballay - ballby)
-       > square(a.radius + b.radius))
+       > square(balla.radius + ballb.radius))
     {
         return false;
     }
     //发生了碰撞
     else
     {
-        //对心碰撞
-        if (a.speed.cross(b.speed) == 0
-            && a.speed.cross(Vec2(ballax-ballbx,ballay-ballby)) == 0)
+        //计算碰撞位置
+        //相对位置
+        float t;
+        if (! calculateCollisionTime(balla, ballb, t))
         {
-            Vec2 tempspeed = a.speed;
-            a.speed = b.speed;
-            b.speed = tempspeed;
+            return false;
+        }
+        
+        //碰撞前的位置
+        ballax = balla.ballObeject->getPositionX() + balla.speed.x*t;
+        ballay = balla.ballObeject->getPositionY() + balla.speed.y*t;
+        ballbx = ballb.ballObeject->getPositionX() + ballb.speed.x*t;
+        ballby = ballb.ballObeject->getPositionY() + ballb.speed.y*t;
+        
+        //根据碰撞时的相对位置计算速度
+        //对心碰撞
+        if (balla.speed.cross(ballb.speed) == 0
+            && balla.speed.cross(Vec2(ballax-ballbx,ballay-ballby)) == 0)
+        {
+            Vec2 tempspeeda = balla.speed;
+            Vec2 tempspeedb = ballb.speed;
+            balla.speed = ((0.0f + balla.weight - ballb.weight)*tempspeeda + 2*ballb.weight*tempspeedb)
+                        / (balla.weight + ballb.weight);
+            ballb.speed = ((0.0f + ballb.weight - balla.weight)*tempspeedb + 2*balla.weight*tempspeeda)
+                        / (balla.weight + ballb.weight);
         }
         //非对心碰撞
         else if (ballax - ballbx == 0)
         {
-            float tmp = a.speed.y;
-            a.speed.y = b.speed.y;
-            b.speed.y = tmp;
+            float tmp = balla.speed.y;
+            balla.speed.y = ((0.0f + balla.weight - ballb.weight)*balla.speed.y + 2*ballb.weight*ballb.speed.y)
+                        / (balla.weight + ballb.weight);
+            ballb.speed.y = ((0.0f + ballb.weight - balla.weight)*ballb.speed.y + 2*balla.weight*tmp)
+                        / (balla.weight + ballb.weight);
         }
         else if (ballay - ballby == 0)
         {
-            float tmp = a.speed.x;
-            a.speed.x = b.speed.x;
-            b.speed.x = tmp;
+            float tmp = balla.speed.x;
+            balla.speed.x = ((0.0f + balla.weight - ballb.weight)*balla.speed.x + 2*ballb.weight*ballb.speed.x)
+                        / (balla.weight + ballb.weight);
+            ballb.speed.x = ((0.0f + ballb.weight - balla.weight)*ballb.speed.x + 2*balla.weight*tmp)
+                        / (balla.weight + ballb.weight);
         }
         else
         {
-            Vec2 tempspeed = a.speed;
-            a.speed = b.speed;
-            b.speed = tempspeed;
+
+            //碰撞处切平面向量t，及其法向量s
+            Vec2 s(ballax - ballbx, ballay - ballby);
+            s.normalize();
+            Vec2 t(s);
+            t.rotate(Vec2(0,0),3.1415926f/2);
+            t.normalize();
+
+            //先计算球a的speed在s和t轴的投影值，分别设为speedAs和speedAt
+            //再计算球b的speed在s和t轴的投影值，分别设为speedBs和speedBt
+            Vec2 speedAs = balla.speed.project(s);
+            Vec2 speedAt = balla.speed.project(t);
+            Vec2 speedBs = ballb.speed.project(s);
+            Vec2 speedBt = ballb.speed.project(t);
+
+            //s轴上的速度交换
+            Vec2 temp_speedAs = speedAs;
+            speedAs = ((0.0f + balla.weight - ballb.weight)*speedAs + 2*ballb.weight*speedBs)
+            / (balla.weight + ballb.weight);
+            speedBs = ((0.0f + ballb.weight - balla.weight)*speedBs + 2*balla.weight*temp_speedAs)
+            / (balla.weight + ballb.weight);
             
-//            //碰撞处切平面向量t，及其法向量s
-//            Vec2 s(ballax - ballbx, ballay - ballby);
-//            s.normalize();
-//            Vec2 t(s);
-//            t.rotate(Vec2(0,0),3.1415926f/2);
-//            t.normalize();
-//
-//            //先计算球a的speed在s和t轴的投影值，分别设为speed1s和speed1t
-//            //再计算球b的speed在s和t轴的投影值，分别设为speed2s和speed2t
-//            Vec2 speed1s = a.speed.project(s);
-//            Vec2 speed1t = a.speed.project(t);
-//            Vec2 speed2s = b.speed.project(s);
-//            Vec2 speed2t = b.speed.project(t);
-//
-//            Vec2 temp_speed1s = speed1s;
-//            speed1s = speed2s;
-//            speed2s = temp_speed1s;
-//
-//            a.speed.x = (speed1s + speed1t).x;
-//            a.speed.y = (speed1s + speed1t).y;
-//            b.speed.x = (speed2s + speed2t).x;
-//            b.speed.y = (speed2s + speed2t).y;
+            balla.speed.x = (speedAs + speedAt).x;
+            balla.speed.y = (speedAs + speedAt).y;
+            ballb.speed.x = (speedBs + speedBt).x;
+            ballb.speed.y = (speedBs + speedBt).y;
+            
         }
-
-
-        
-        //重新设定位置，防止小球重合
-        float distance = sqrt(square(ballax - ballbx) + square(ballay - ballby));
-        float overlap = a.radius + b.radius - distance;
-        float speedavalue = sqrt(square(a.speed.x) + square(a.speed.y));
-        float speedbvalue = sqrt(square(b.speed.x) + square(b.speed.y));
         
 
-        if (speedbvalue == 0 && speedavalue != 0)
-        {
-            a.ballObeject->setPosition(a.ballObeject->getPositionX() + overlap*a.speed.x/speedavalue,
-                                       a.ballObeject->getPositionY() + overlap*a.speed.y/speedavalue);
-        }
-        else if (speedavalue == 0 && speedbvalue != 0)
-        {
-            b.ballObeject->setPosition(b.ballObeject->getPositionX() + overlap*b.speed.x/speedbvalue,
-                                       b.ballObeject->getPositionY() + overlap*b.speed.y/speedbvalue);
-        }
-        else if (speedbvalue != 0 && speedavalue != 0)
-        {
-            a.ballObeject->setPosition(a.ballObeject->getPositionX() + overlap/2*a.speed.x/speedavalue,
-                                       a.ballObeject->getPositionY() + overlap/2*a.speed.y/speedavalue);
-            b.ballObeject->setPosition(b.ballObeject->getPositionX() + overlap/2*b.speed.x/speedbvalue,
-                                       b.ballObeject->getPositionY() + overlap/2*b.speed.y/speedbvalue);
-        }
+
+        //碰撞后的位置
+        ballax = ballax + balla.speed.x * (1 - t);
+        ballay = ballay + balla.speed.y * (1 - t);
+        ballbx = ballbx + ballb.speed.x * (1 - t);
+        ballby = ballby + ballb.speed.y * (1 - t);
+        
+        //将碰撞后的位置存入小球的预测位置中
+        balla.nextPosition = Vec2(ballax, ballay);
+        ballb.nextPosition = Vec2(ballbx, ballby);
+
 
  
         //发生碰撞返回true
@@ -238,80 +297,81 @@ bool detectCollision(HFBall& a,HFBall& b)
 
 //检测边界碰撞
 bool HelloWorld::detectboundary(HFBall &ball) {
-    auto ballPosition = ball.ballObeject->getPosition();
+    
+    auto ballNextPosition = ball.nextPosition;
     bool state = false;
-    double distancex = 0;
-    double distancey = 0;
+//    double distancex = 0;
+//    double distancey = 0;
     //检测左右边界
-    if (ballPosition.x < widthLeft + ball.radius)
+    if (ballNextPosition.x < widthLeft + ball.radius)
     {
         //速度变为向右，防止小球在墙中抖动
         ball.speed.x = abs(ball.speed.x);
         state = true;
         //更改小球位置，防止动画穿模
-        distancex = abs(ball.radius - (ballPosition.x - widthLeft));
-        if (ball.speed.x == 0)
-        {
-            ball.ballObeject->setPositionX(ball.ballObeject->getPositionX() + distancex);
-        }
-        else
-        {
-            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancex,
-                                          ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
-        }
+//        distancex = abs(ball.radius - (ballNextPosition.x - widthLeft));
+//        if (ball.speed.x == 0)
+//        {
+//            ball.ballObeject->setPositionX(ball.ballObeject->getPositionX() + distancex);
+//        }
+//        else
+//        {
+//            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancex,
+//                                          ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
+//        }
 
     }
-    else if (ballPosition.x > widthRight - ball.radius)
+    else if (ballNextPosition.x > widthRight - ball.radius)
     {
         ball.speed.x = abs(ball.speed.x) * -1;
         state = true;
         
-        distancex = abs(ball.radius - (widthRight - ballPosition.x));
-        if (ball.speed.x == 0)
-        {
-            ball.ballObeject->setPositionX(ball.ballObeject->getPositionX() - distancex);
-        }
-        else
-        {
-            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() - distancex,
-                                          ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
-        }
+//        distancex = abs(ball.radius - (widthRight - ballNextPosition.x));
+//        if (ball.speed.x == 0)
+//        {
+//            ball.ballObeject->setPositionX(ball.ballObeject->getPositionX() - distancex);
+//        }
+//        else
+//        {
+//            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() - distancex,
+//                                          ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
+//        }
        
     }
     
     //检测上下边界
-    if (ballPosition.y < heightDown + ball.radius)
+    if (ballNextPosition.y < heightDown + ball.radius)
     {
         ball.speed.y = abs(ball.speed.y);
         state = true;
         
-        distancey = abs(ball.radius - (ballPosition.y - heightDown));
-        if (ball.speed.y == 0)
-        {
-            ball.ballObeject->setPositionY(ball.ballObeject->getPositionY() + distancey);
-        }
-        else
-        {
-            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
-                                          ball.ballObeject->getPositionY() + distancey);
-        }
+//        distancey = abs(ball.radius - (ballNextPosition.y - heightDown));
+//        if (ball.speed.y == 0)
+//        {
+//            ball.ballObeject->setPositionY(ball.ballObeject->getPositionY() + distancey);
+//        }
+//        else
+//        {
+//            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
+//                                          ball.ballObeject->getPositionY() + distancey);
+//        }
 
     }
-    else if (ballPosition.y > heightUp - ball.radius)
+    else if (ballNextPosition.y > heightUp - ball.radius)
     {
         ball.speed.y = abs(ball.speed.y) * -1;
         state = true;
         
-        distancey = abs(ball.radius - (heightUp - ballPosition.y));
-        if (ball.speed.y == 0)
-        {
-            ball.ballObeject->setPositionY(ball.ballObeject->getPositionY() - distancey);
-        }
-        else
-        {
-            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
-                                          ball.ballObeject->getPositionY() - distancey);
-        }
+//        distancey = abs(ball.radius - (heightUp - ballNextPosition.y));
+//        if (ball.speed.y == 0)
+//        {
+//            ball.ballObeject->setPositionY(ball.ballObeject->getPositionY() - distancey);
+//        }
+//        else
+//        {
+//            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
+//                                          ball.ballObeject->getPositionY() - distancey);
+//        }
 
     }
     
