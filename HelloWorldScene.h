@@ -26,5 +26,5 @@ private:
     std::vector<HFBall> balllist;
 
 };
-
+float square(float x);
 #endif // __HELLOWORLD_SCENE_H__

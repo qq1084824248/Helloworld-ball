@@ -73,19 +73,20 @@ bool HelloWorld::init()
     listener1->onTouchBegan = [&](Touch* touch, Event* event)
     {
         //设定小球的属性，随机生成半径和速度
-        const Vec2 touchpos = touch->getLocation();
-        const int radius = random(20, 50);
+        const Vec2 touchPosition = touch->getLocation();
+        const unsigned int radius = random(20, 50);
+        const unsigned int weight = square(radius);
         const float speedX = random(-10, 10),speedY = random(-10, 10);
         
         //构建小球对象，加入scene的子节点中
         DrawNode* tempball = DrawNode::create();
         tempball->drawDot(Vec2(0,0), radius, Color4F(1.0f, 1.0f, 1.0f, 1.0f));
-        tempball->setPosition(touchpos);
+        tempball->setPosition(touchPosition);
         this->addChild(tempball);
         
         
         //构建结构体，加入vector
-        HFBall b(tempball,Vec2(speedX,speedY),radius);
+        HFBall b(tempball, Vec2(speedX,speedY), radius, weight);
         this->balllist.push_back(b);
         
         return true;
@@ -205,15 +206,30 @@ bool detectCollision(HFBall& a,HFBall& b)
         
         //重新设定位置，防止小球重合
         float distance = sqrt(square(ballax - ballbx) + square(ballay - ballby));
-        float overlap = (a.radius + b.radius - distance)/2;
+        float overlap = a.radius + b.radius - distance;
         float speedavalue = sqrt(square(a.speed.x) + square(a.speed.y));
         float speedbvalue = sqrt(square(b.speed.x) + square(b.speed.y));
         
 
-        a.ballObeject->setPosition(a.ballObeject->getPositionX() + overlap*a.speed.x/speedavalue,
-                                   a.ballObeject->getPositionY() + overlap*a.speed.y/speedavalue);
-        b.ballObeject->setPosition(b.ballObeject->getPositionX() + overlap*b.speed.x/speedbvalue,
-                                   b.ballObeject->getPositionY() + overlap*b.speed.y/speedbvalue);
+        if (speedbvalue == 0 && speedavalue != 0)
+        {
+            a.ballObeject->setPosition(a.ballObeject->getPositionX() + overlap*a.speed.x/speedavalue,
+                                       a.ballObeject->getPositionY() + overlap*a.speed.y/speedavalue);
+        }
+        else if (speedavalue == 0 && speedbvalue != 0)
+        {
+            b.ballObeject->setPosition(b.ballObeject->getPositionX() + overlap*b.speed.x/speedbvalue,
+                                       b.ballObeject->getPositionY() + overlap*b.speed.y/speedbvalue);
+        }
+        else if (speedbvalue != 0 && speedavalue != 0)
+        {
+            a.ballObeject->setPosition(a.ballObeject->getPositionX() + overlap/2*a.speed.x/speedavalue,
+                                       a.ballObeject->getPositionY() + overlap/2*a.speed.y/speedavalue);
+            b.ballObeject->setPosition(b.ballObeject->getPositionX() + overlap/2*b.speed.x/speedbvalue,
+                                       b.ballObeject->getPositionY() + overlap/2*b.speed.y/speedbvalue);
+        }
+
+ 
         //发生碰撞返回true
         return true;
     }
@@ -234,8 +250,16 @@ bool HelloWorld::detectboundary(HFBall &ball) {
         state = true;
         //更改小球位置，防止动画穿模
         distancex = abs(ball.radius - (ballPosition.x - widthLeft));
-        ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancex,
-                                      ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
+        if (ball.speed.x == 0)
+        {
+            ball.ballObeject->setPositionX(ball.ballObeject->getPositionX() + distancex);
+        }
+        else
+        {
+            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancex,
+                                          ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
+        }
+
     }
     else if (ballPosition.x > widthRight - ball.radius)
     {
@@ -243,8 +267,16 @@ bool HelloWorld::detectboundary(HFBall &ball) {
         state = true;
         
         distancex = abs(ball.radius - (widthRight - ballPosition.x));
-        ball.ballObeject->setPosition(ball.ballObeject->getPositionX() - distancex,
-                                      ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
+        if (ball.speed.x == 0)
+        {
+            ball.ballObeject->setPositionX(ball.ballObeject->getPositionX() - distancex);
+        }
+        else
+        {
+            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() - distancex,
+                                          ball.ballObeject->getPositionY() + distancex*ball.speed.y/abs(ball.speed.x));
+        }
+       
     }
     
     //检测上下边界
@@ -254,8 +286,16 @@ bool HelloWorld::detectboundary(HFBall &ball) {
         state = true;
         
         distancey = abs(ball.radius - (ballPosition.y - heightDown));
-        ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
-                                      ball.ballObeject->getPositionY() + distancey);
+        if (ball.speed.y == 0)
+        {
+            ball.ballObeject->setPositionY(ball.ballObeject->getPositionY() + distancey);
+        }
+        else
+        {
+            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
+                                          ball.ballObeject->getPositionY() + distancey);
+        }
+
     }
     else if (ballPosition.y > heightUp - ball.radius)
     {
@@ -263,8 +303,16 @@ bool HelloWorld::detectboundary(HFBall &ball) {
         state = true;
         
         distancey = abs(ball.radius - (heightUp - ballPosition.y));
-        ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
-                                      ball.ballObeject->getPositionY() - distancey);
+        if (ball.speed.y == 0)
+        {
+            ball.ballObeject->setPositionY(ball.ballObeject->getPositionY() - distancey);
+        }
+        else
+        {
+            ball.ballObeject->setPosition(ball.ballObeject->getPositionX() + distancey*ball.speed.x/abs(ball.speed.y),
+                                          ball.ballObeject->getPositionY() - distancey);
+        }
+
     }
     
     return state;

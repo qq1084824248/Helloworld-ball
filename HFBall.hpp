@@ -13,13 +13,15 @@
 
 struct HFBall{
 public:
-    HFBall(cocos2d::DrawNode *ballpoint, cocos2d::Vec2 v, int r):ballObeject(ballpoint), speed(v), radius(r)
+    HFBall(cocos2d::DrawNode *ballpoint, cocos2d::Vec2 v, unsigned int r, unsigned int t)
+    :ballObeject(ballpoint), speed(v), radius(r),weight(t)
     {
     }
     
     cocos2d::DrawNode *ballObeject;
     cocos2d::Vec2 speed;
     unsigned int radius;
+    unsigned int weight;
 };
 
 #endif /* ball_hpp */
